@@ -2,8 +2,8 @@
 <html lang="es" data-theme="dark">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Project Zomboid - Guía de Supervivencia Interactiva</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Project Zomboid - Guía Táctica & Nodos (v3.3)</title>
     <style>
         /* --------------------------------------------------
            VARIABLES & THEME CONFIGURATION
@@ -20,6 +20,15 @@
             --shadow-color: rgba(0, 0, 0, 0.5);
             --highlight-match: rgba(255, 215, 0, 0.2);
             --highlight-border: #ffd700;
+
+            /* Node Graph Colors */
+            --grid-line: rgba(255, 255, 255, 0.05);
+            --node-bg: #1a1a1a;
+            --node-border: #000;
+            --wire-color: #555;
+            --wire-active: #ffd700;
+            --pin-color: #777;
+            --pin-hover: #fff;
 
             /* PZ Theme Semantic Colors */
             --color-loot: #4caf50;
@@ -48,6 +57,12 @@
             --border-color: rgba(0, 0, 0, 0.1);
             --shadow-color: rgba(0, 0, 0, 0.1);
             --highlight-match: rgba(255, 215, 0, 0.4);
+            --grid-line: rgba(0, 0, 0, 0.05);
+            --node-bg: #fff;
+            --node-border: #ccc;
+            --wire-color: #aaa;
+            --pin-color: #999;
+            --pin-hover: #333;
         }
 
         /* --------------------------------------------------
@@ -61,840 +76,666 @@
             color: var(--text-main);
             line-height: 1.6;
             transition: background-color var(--trans-speed), color var(--trans-speed);
-            padding-bottom: 50px; /* Space for scrolling */
+            overflow: hidden;
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+            overscroll-behavior: none;
         }
 
-        /* Custom Scrollbar */
-        ::-webkit-scrollbar { width: 8px; }
+        /* Scrollbars */
+        ::-webkit-scrollbar { width: 8px; height: 8px; }
         ::-webkit-scrollbar-track { background: var(--bg-body); }
         ::-webkit-scrollbar-thumb { background: #555; border-radius: 4px; }
         ::-webkit-scrollbar-thumb:hover { background: #777; }
 
-        /* Icons (SVG Helpers) */
-        .icon {
-            width: 1.2em;
-            height: 1.2em;
-            fill: currentColor;
-            display: inline-block;
-            vertical-align: middle;
-        }
+        .icon { width: 1.2em; height: 1.2em; fill: currentColor; display: inline-block; vertical-align: middle; }
 
         /* --------------------------------------------------
            STICKY CONTROLS HEADER
            -------------------------------------------------- */
         .app-header {
-            position: sticky;
-            top: 0;
             z-index: 100;
             background-color: var(--bg-header);
             backdrop-filter: blur(10px);
             border-bottom: 1px solid var(--border-color);
             padding: 10px 20px;
             box-shadow: 0 4px 12px var(--shadow-color);
+            flex-shrink: 0;
         }
 
-        .header-content {
-            max-width: 1600px;
-            margin: 0 auto;
-            display: flex;
-            flex-wrap: wrap;
-            gap: 15px;
-            align-items: center;
-            justify-content: space-between;
-        }
+        .header-content { max-width: 1800px; margin: 0 auto; display: flex; flex-wrap: wrap; gap: 15px; align-items: center; justify-content: space-between; }
 
-        .brand h1 {
-            font-size: 1.4rem;
-            text-transform: uppercase;
-            letter-spacing: 1px;
-            margin: 0;
-        }
+        .brand h1 { font-size: 1.4rem; text-transform: uppercase; letter-spacing: 1px; margin: 0; }
         .brand span { color: var(--color-combat); }
         .brand small { font-size: 0.8rem; color: var(--text-muted); display: block; line-height: 1; }
 
-        /* Control Bar */
-        .controls {
-            display: flex;
-            align-items: center;
-            gap: 10px;
-            flex-grow: 1;
-            justify-content: flex-end;
-        }
+        .controls { display: flex; align-items: center; gap: 10px; flex-grow: 1; justify-content: flex-end; }
 
-        /* Search Box */
-        .search-container {
+        .view-tabs { display: flex; background: var(--bg-card); padding: 4px; border-radius: 8px; margin-right: 15px; border: 1px solid var(--border-color); }
+        .view-tab { padding: 6px 12px; border: none; background: transparent; color: var(--text-muted); cursor: pointer; border-radius: 6px; font-size: 0.85rem; font-weight: 600; display: flex; align-items: center; gap: 5px; transition: all 0.2s; }
+        .view-tab.active { background: var(--bg-panel); color: var(--text-main); box-shadow: 0 2px 4px var(--shadow-color); }
+        .view-tab:hover:not(.active) { color: var(--text-main); }
+
+        .search-container { position: relative; flex-grow: 1; max-width: 300px; display: flex; align-items: center; }
+        .search-input { width: 100%; background: var(--bg-card); border: 1px solid var(--border-color); color: var(--text-main); padding: 8px 35px 8px 12px; border-radius: 20px; outline: none; transition: border-color 0.2s, box-shadow 0.2s; }
+        .search-input:focus { border-color: var(--color-skills); box-shadow: 0 0 0 2px rgba(33, 150, 243, 0.2); }
+        .search-icon { position: absolute; right: 12px; opacity: 0.5; pointer-events: none; }
+
+        .btn-icon { background: transparent; border: none; color: var(--text-main); cursor: pointer; padding: 8px; border-radius: 50%; display: flex; align-items: center; justify-content: center; }
+        .btn-icon:hover { background: rgba(255, 255, 255, 0.1); }
+
+        /* --------------------------------------------------
+           MAIN CONTAINER & VIEWS
+           -------------------------------------------------- */
+        .main-container { position: relative; flex-grow: 1; overflow: hidden; width: 100%; }
+        .view { position: absolute; top: 0; left: 0; width: 100%; height: 100%; opacity: 0; visibility: hidden; transition: opacity 0.3s, visibility 0.3s; overflow-y: auto; overflow-x: hidden; }
+        .view.active-view { opacity: 1; visibility: visible; z-index: 10; }
+
+        /* --------------------------------------------------
+           VIEW 1: DASHBOARD (Classic)
+           -------------------------------------------------- */
+        .dashboard { display: grid; grid-template-columns: repeat(auto-fill, minmax(350px, 1fr)); gap: 25px; max-width: 1600px; margin: 25px auto; padding: 0 20px 50px 20px; }
+        .quick-nav { display: flex; gap: 15px; overflow-x: auto; padding: 10px 20px; scrollbar-width: none; border-bottom: 1px solid var(--border-color); background: var(--bg-header); width: 100%; z-index: 90; }
+        .quick-nav::-webkit-scrollbar { display: none; }
+        .nav-link { font-size: 0.85rem; color: var(--text-muted); text-decoration: none; white-space: nowrap; padding: 4px 8px; border-radius: 12px; transition: all 0.2s; display: flex; align-items: center; gap: 5px; }
+        .nav-link:hover, .nav-link.active { color: var(--text-main); background: rgba(255,255,255,0.05); }
+        .nav-link.active { font-weight: bold; box-shadow: inset 0 -2px 0 var(--active-color, currentColor); }
+
+        .category-section { background-color: var(--bg-panel); border-radius: var(--radius-md); box-shadow: 0 4px 6px var(--shadow-color); border-top: 4px solid var(--section-color); display: flex; flex-direction: column; margin-bottom: 0; height: fit-content; }
+        .category-header { display: flex; align-items: center; gap: 10px; padding: 15px 20px; cursor: pointer; user-select: none; border-bottom: 1px solid transparent; }
+        .category-header:hover { background-color: rgba(255,255,255,0.02); }
+        .category-header h2 { font-size: 1.1rem; font-weight: 700; color: var(--section-color); text-transform: uppercase; flex-grow: 1; }
+        .toggle-icon { transition: transform 0.3s; transform: rotate(0deg); }
+        .category-section.collapsed .toggle-icon { transform: rotate(-90deg); }
+        .category-section.collapsed .category-content { display: none; }
+        .category-content { padding: 20px; border-top: 1px solid var(--border-color); }
+        .card-grid { display: flex; flex-direction: column; gap: 12px; }
+        .card { background-color: var(--bg-card); border-radius: var(--radius-sm); padding: 15px; border-left: 3px solid transparent; position: relative; }
+        .card:hover { border-left-color: var(--section-color); transform: translateX(5px); }
+        .card h3 { font-size: 1rem; margin-bottom: 8px; display: flex; justify-content: space-between; align-items: center; }
+        .card-content { font-size: 0.9rem; color: var(--text-muted); }
+        .card-content ul { padding-left: 10px; list-style: none; }
+        .card-content li::before { content: "•"; color: var(--section-color); font-weight: bold; margin-right: 5px; }
+
+        .badge { font-size: 0.7rem; padding: 2px 6px; border-radius: 4px; text-transform: uppercase; font-weight: bold; background: rgba(255,255,255,0.1); }
+        .badge-pro { color: #ffd700; border: 1px solid rgba(255, 215, 0, 0.4); background: rgba(255, 215, 0, 0.1); }
+        .badge-danger { color: #ef5350; border: 1px solid rgba(211, 47, 47, 0.4); background: rgba(211, 47, 47, 0.1); }
+        .badge-info { color: #2196f3; border: 1px solid rgba(33, 150, 243, 0.4); background: rgba(33, 150, 243, 0.1); }
+
+        /* --------------------------------------------------
+           VIEW 2: NODE EDITOR (Canvas)
+           -------------------------------------------------- */
+        #nodeView {
+            background-color: #111;
+            background-image: 
+                linear-gradient(var(--grid-line) 1px, transparent 1px),
+                linear-gradient(90deg, var(--grid-line) 1px, transparent 1px);
+            background-size: 40px 40px;
+            cursor: grab;
+            overflow: hidden;
             position: relative;
-            flex-grow: 1;
-            max-width: 400px;
-            display: flex;
-            align-items: center;
+            touch-action: none;
+            user-select: none;
+            -webkit-user-select: none;
         }
+        #nodeView:active { cursor: grabbing; }
 
-        .search-input {
-            width: 100%;
-            background: var(--bg-card);
-            border: 1px solid var(--border-color);
-            color: var(--text-main);
-            padding: 8px 35px 8px 12px;
-            border-radius: 20px;
-            outline: none;
-            transition: border-color 0.2s, box-shadow 0.2s;
-        }
-
-        .search-input:focus {
-            border-color: var(--color-skills);
-            box-shadow: 0 0 0 2px rgba(33, 150, 243, 0.2);
-        }
-
-        .search-icon {
+        #nodeWorld {
             position: absolute;
-            right: 12px;
-            opacity: 0.5;
+            top: 0; left: 0;
+            width: 0; height: 0;
+            transform-origin: 0 0;
             pointer-events: none;
         }
 
-        .search-nav {
-            display: none; /* Hidden by default until active */
-            align-items: center;
-            gap: 5px;
-            margin-left: 5px;
-            font-size: 0.85rem;
-            color: var(--text-muted);
-            white-space: nowrap;
-        }
-        .search-nav.active { display: flex; }
-        
-        .btn-mini {
-            background: var(--bg-panel);
-            border: 1px solid var(--border-color);
-            color: var(--text-main);
-            border-radius: 4px;
-            cursor: pointer;
-            padding: 2px 6px;
-            font-size: 0.8rem;
-        }
-        .btn-mini:hover { background: var(--bg-card); }
+        .node-layer { pointer-events: auto; }
 
-        /* Action Buttons */
-        .btn-icon {
-            background: transparent;
-            border: none;
-            color: var(--text-main);
-            cursor: pointer;
-            padding: 8px;
-            border-radius: 50%;
-            transition: background 0.2s;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-        }
-        .btn-icon:hover { background: rgba(255, 255, 255, 0.1); }
-        [data-theme="light"] .btn-icon:hover { background: rgba(0, 0, 0, 0.05); }
-
-        /* Quick Nav (Desktop) */
-        .quick-nav {
-            display: flex;
-            gap: 15px;
-            overflow-x: auto;
-            padding: 5px 0;
-            scrollbar-width: none;
-            border-top: 1px solid var(--border-color);
-            margin-top: 5px;
-            width: 100%;
-        }
-        .quick-nav::-webkit-scrollbar { display: none; }
-
-        .nav-link {
-            font-size: 0.85rem;
-            color: var(--text-muted);
-            text-decoration: none;
-            white-space: nowrap;
-            padding: 4px 8px;
-            border-radius: 12px;
-            transition: all 0.2s;
-            display: flex;
-            align-items: center;
-            gap: 5px;
-        }
-        .nav-link:hover, .nav-link.active {
-            color: var(--text-main);
-            background: rgba(255,255,255,0.05);
-        }
-        [data-theme="light"] .nav-link:hover { background: rgba(0,0,0,0.05); }
-        .nav-link.active { font-weight: bold; box-shadow: inset 0 -2px 0 var(--active-color, currentColor); }
-
-        /* --------------------------------------------------
-           DASHBOARD GRID & CONTENT
-           -------------------------------------------------- */
-        .dashboard {
-            display: grid;
-            grid-template-columns: repeat(auto-fill, minmax(350px, 1fr));
-            gap: 25px;
-            max-width: 1600px;
-            margin: 25px auto;
-            padding: 0 20px;
-        }
-
-        /* Categories (Accordion) */
-        .category-section {
-            background-color: var(--bg-panel);
-            border-radius: var(--radius-md);
-            box-shadow: 0 4px 6px var(--shadow-color);
-            border-top: 4px solid var(--section-color);
-            display: flex;
-            flex-direction: column;
-            transition: transform 0.2s, box-shadow 0.2s;
-            height: fit-content;
-        }
-
-        .category-header {
-            display: flex;
-            align-items: center;
-            gap: 10px;
-            padding: 15px 20px;
-            cursor: pointer;
-            user-select: none;
-            border-bottom: 1px solid transparent;
-            transition: background 0.2s;
-        }
-
-        .category-header:hover {
-            background-color: rgba(255,255,255,0.02);
-        }
-        [data-theme="light"] .category-header:hover { background-color: rgba(0,0,0,0.02); }
-
-        .category-header h2 {
-            font-size: 1.1rem;
-            font-weight: 700;
-            color: var(--section-color);
-            text-transform: uppercase;
-            flex-grow: 1;
-        }
-
-        .toggle-icon {
-            transition: transform 0.3s ease;
-            opacity: 0.6;
-        }
-        
-        .category-section.collapsed .toggle-icon {
-            transform: rotate(-90deg);
-        }
-        
-        .category-section.collapsed .category-content {
-            display: none;
-        }
-        
-        .category-section.collapsed .category-header {
-            border-bottom: none;
-        }
-
-        .category-content {
-            padding: 20px;
-            border-top: 1px solid var(--border-color);
-            animation: fadeIn 0.3s ease;
-        }
-
-        @keyframes fadeIn {
-            from { opacity: 0; transform: translateY(-5px); }
-            to { opacity: 1; transform: translateY(0); }
-        }
-
-        /* Cards */
-        .card-grid {
-            display: flex;
-            flex-direction: column;
-            gap: 12px;
-        }
-
-        .card {
-            background-color: var(--bg-card);
-            border-radius: var(--radius-sm);
-            padding: 15px;
-            transition: all 0.2s ease;
-            border-left: 3px solid transparent;
-            position: relative;
-        }
-
-        .card:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 4px 12px var(--shadow-color);
-            border-left-color: var(--section-color);
-        }
-
-        /* Search Match Highlight State */
-        .card.search-match {
-            border: 2px solid var(--highlight-border);
-            background-color: rgba(255, 215, 0, 0.05);
-            box-shadow: 0 0 15px var(--highlight-match);
-        }
-        
-        .card.active-focus {
-            transform: scale(1.02);
-            border-color: var(--highlight-border);
-            box-shadow: 0 0 20px var(--highlight-match);
-            z-index: 2;
-        }
-
-        .card h3 {
-            font-size: 1rem;
-            margin-bottom: 8px;
-            color: var(--text-main);
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-        }
-
-        .card-content {
-            font-size: 0.9rem;
-            color: var(--text-muted);
-        }
-
-        .card-content ul {
-            list-style-type: none;
-            padding-left: 10px;
-        }
-        
-        .card-content li {
-            position: relative;
-            padding-left: 15px;
-            margin-bottom: 4px;
-        }
-
-        .card-content li::before {
-            content: "•";
-            color: var(--section-color);
-            font-weight: bold;
+        /* SVG Connections - FIXED COORDINATES */
+        #connections {
             position: absolute;
-            left: 0;
+            top: 0; left: 0; /* Aligned with World Origin */
+            width: 1px; height: 1px; /* Minimal size, content spills over */
+            overflow: visible; /* Critical for showing full cables */
+            pointer-events: none;
+            z-index: 0;
+        }
+        .connection-path {
+            fill: none;
+            stroke: var(--wire-color);
+            stroke-width: 2px;
+            stroke-linecap: round;
+            pointer-events: none;
+        }
+        .connection-path.temp {
+            stroke: var(--wire-active);
+            stroke-dasharray: 5, 5;
         }
 
-        strong { color: var(--text-main); font-weight: 700; }
+        /* Node Elements */
+        .node-box {
+            position: absolute;
+            width: 320px;
+            background: var(--node-bg);
+            border: 2px solid #000;
+            border-radius: 12px;
+            box-shadow: 0 10px 20px rgba(0,0,0,0.5);
+            display: flex;
+            flex-direction: column;
+            z-index: 1;
+            user-select: none;
+            -webkit-user-select: none;
+            transition: box-shadow 0.2s, height 0.3s;
+            touch-action: none;
+        }
         
-        /* Highlight span for text search */
-        .highlight-text {
-            background-color: var(--highlight-match);
-            color: var(--text-main);
-            padding: 0 2px;
-            border-radius: 2px;
+        .node-box:hover {
+            box-shadow: 0 0 0 2px var(--node-color), 0 15px 30px rgba(0,0,0,0.7);
+            z-index: 5;
         }
 
-        /* Badges */
-        .badge {
-            font-size: 0.7rem;
-            padding: 2px 6px;
-            border-radius: 4px;
-            text-transform: uppercase;
+        .node-box.minimized .node-body { display: none; }
+        .node-box.minimized .node-collapse-btn { transform: rotate(-90deg); }
+
+        .node-header {
+            padding: 8px 12px;
+            background: linear-gradient(to right, rgba(0,0,0,0.2), transparent);
+            background-color: var(--node-color);
+            border-radius: 10px 10px 0 0;
+            color: #fff;
             font-weight: bold;
-            letter-spacing: 0.5px;
-            background: rgba(255,255,255,0.1);
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            cursor: grab;
+            position: relative;
         }
-        .badge-pro { background: rgba(255, 215, 0, 0.2); color: #ffd700; border: 1px solid rgba(255, 215, 0, 0.4); }
-        .badge-danger { background: rgba(211, 47, 47, 0.2); color: #ef5350; border: 1px solid rgba(211, 47, 47, 0.4); }
+        .node-header:active { cursor: grabbing; }
 
-        /* Responsive */
+        .node-collapse-btn { margin-left: auto; cursor: pointer; transition: transform 0.2s; width: 30px; height: 30px; display: flex; align-items: center; justify-content: center; border-radius: 4px; }
+        .node-collapse-btn:hover { background: rgba(0,0,0,0.2); }
+
+        .node-body { padding: 10px; display: flex; flex-direction: column; gap: 8px; }
+
+        /* Node Item (Expandable) */
+        .node-item {
+            background: rgba(255,255,255,0.03);
+            padding: 8px;
+            border-radius: 4px;
+            font-size: 0.8rem;
+            border-left: 2px solid rgba(255,255,255,0.1);
+            color: var(--text-muted);
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+        .node-item:hover { background: rgba(255,255,255,0.06); }
+        .node-item strong { display: block; color: var(--text-main); margin-bottom: 4px; font-size: 0.85rem; }
+        
+        /* Text Truncation */
+        .node-item-text {
+            display: -webkit-box;
+            -webkit-line-clamp: 2; /* Show only 2 lines by default */
+            -webkit-box-orient: vertical;
+            overflow: hidden;
+            transition: all 0.3s ease;
+        }
+        
+        /* Expanded State */
+        .node-item.expanded .node-item-text {
+            -webkit-line-clamp: unset; /* Show all lines */
+            overflow: visible;
+            color: var(--text-main);
+        }
+        
+        .node-item-toggle {
+            font-size: 0.7rem;
+            color: var(--node-color);
+            text-align: right;
+            margin-top: 4px;
+            font-weight: bold;
+            opacity: 0.7;
+        }
+        .node-item:hover .node-item-toggle { opacity: 1; }
+        .node-item.expanded .node-item-toggle { display: none; } /* Hide "Ver más" when open */
+
+        .node-pins-container { position: absolute; top: 40px; bottom: 10px; width: 30px; display: flex; flex-direction: column; gap: 15px; pointer-events: none; }
+        .pins-left { left: -15px; align-items: flex-start; }
+        .pins-right { right: -15px; align-items: flex-end; }
+
+        .node-pin {
+            width: 20px; height: 20px;
+            background: var(--node-bg);
+            border: 3px solid var(--pin-color);
+            border-radius: 50%;
+            pointer-events: auto;
+            cursor: crosshair;
+            transition: transform 0.1s, background-color 0.1s;
+        }
+        .node-pin:hover, .node-pin:active { border-color: var(--wire-active); transform: scale(1.2); background: var(--pin-hover); }
+
+        .node-start { width: 180px; text-align: center; border-radius: 50px; border: 3px solid #fff; }
+        .node-start .node-header { border-radius: 40px; justify-content: center; background: transparent; padding-right: 12px; }
+        .node-start .node-collapse-btn { display: none; }
+        .node-start .node-body { padding: 15px; text-align: center; font-size: 0.8rem; }
+
         @media (max-width: 768px) {
             .dashboard { grid-template-columns: 1fr; }
-            .search-container { max-width: 100%; order: 3; width: 100%; margin-top: 10px; }
-            .controls { width: 100%; justify-content: space-between; }
-            .quick-nav { padding-bottom: 10px; }
+            .header-content { gap: 10px; }
+            .view-tabs span { display: none; }
+            .search-container { max-width: 150px; }
+            .node-box { width: 280px; }
         }
     </style>
 </head>
 <body>
 
-    <!-- Header & Controls -->
     <header class="app-header">
         <div class="header-content">
-            
-            <!-- Logo -->
             <div class="brand">
                 <h1>Project <span>Zomboid</span></h1>
-                <small>Survival Dashboard 2.0</small>
+                <small>Guía Táctica Interactiva v3.3</small>
             </div>
-
-            <!-- Controls -->
             <div class="controls">
-                <!-- Theme Toggle -->
-                <button class="btn-icon" id="themeToggle" aria-label="Cambiar Tema" title="Cambiar Tema (Oscuro/Claro)">
+                <div class="view-tabs">
+                    <button class="view-tab active" data-target="dashboardView" title="Vista Dashboard">
+                        <svg class="icon" viewBox="0 0 24 24"><path d="M3 13h8V3H3v10zm0 8h8v-6H3v6zm10 0h8V11h-8v10zm0-18v6h8V3h-8z"/></svg>
+                        <span>Dashboard</span>
+                    </button>
+                    <button class="view-tab" data-target="nodeView" title="Vista Nodos">
+                        <svg class="icon" viewBox="0 0 24 24"><path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm-7 9h-2V7h-2v5H6v2h2v5h2v-5h5v-2z"/></svg>
+                        <span>Nodos</span>
+                    </button>
+                </div>
+                <button class="btn-icon" id="themeToggle" title="Cambiar Tema">
                     <svg class="icon moon" viewBox="0 0 24 24"><path d="M12 3a9 9 0 1 0 9 9c0-.46-.04-.92-.1-1.36a5.389 5.389 0 0 1-4.4 2.26 5.403 5.403 0 0 1-3.14-9.8c-.44-.06-.9-.1-1.36-.1z"/></svg>
-                    <svg class="icon sun" viewBox="0 0 24 24" style="display:none"><path d="M12 7c-2.76 0-5 2.24-5 5s2.24 5 5 5 5-2.24 5-5-2.24-5-5-5zM2 13h2c.55 0 1-.45 1-1s-.45-1-1-1H2c-.55 0-1 .45-1 1s.45 1 1 1zm18 0h2c.55 0 1-.45 1-1s-.45-1-1-1h-2c-.55 0-1 .45-1 1s.45 1 1 1zM11 2v2c0 .55.45 1 1 1s1-.45 1-1V2c0-.55-.45-1-1-1s-1 .45-1 1zm0 18v2c0 .55.45 1 1 1s1-.45 1-1v-2c0-.55-.45-1-1-1s-1 .45-1 1zM5.99 4.58a.996.996 0 0 0-1.41 0 .996.996 0 0 0 0 1.41l1.06 1.06c.39.39 1.03.39 1.41 0s.39-1.03 0-1.41L5.99 4.58zm12.37 12.37a.996.996 0 0 0-1.41 0 .996.996 0 0 0 0 1.41l1.06 1.06c.39.39 1.03.39 1.41 0a.996.996 0 0 0 0-1.41l-1.06-1.06zm1.06-10.96a.996.996 0 0 0 0-1.41.996.996 0 0 0-1.41 0l-1.06 1.06c-.39.39-.39 1.03 0 1.41s1.03.39 1.41 0l1.06-1.06zM7.05 18.36a.996.996 0 0 0 0 1.41.996.996 0 0 0 1.41 0l1.06-1.06c.39-.39.39-1.03 0-1.41s-1.03-.39-1.41 0l-1.06 1.06z"/></svg>
+                    <svg class="icon sun" viewBox="0 0 24 24" style="display:none"><path d="M12 7c-2.76 0-5 2.24-5 5s2.24 5 5 5 5-2.24 5-5-2.24-5-5-5z"/></svg>
                 </button>
-
-                <!-- Expand/Collapse All -->
-                <button class="btn-icon" id="toggleAllBtn" aria-label="Expandir/Contraer Todo" title="Expandir/Contraer Todo">
-                    <svg class="icon" viewBox="0 0 24 24"><path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/></svg> <!-- Plus icon default -->
-                </button>
-            </div>
-
-            <!-- Search Bar -->
-            <div class="search-container">
-                <input type="text" id="searchInput" class="search-input" placeholder="Buscar táctica, objeto o consejo..." aria-label="Buscar">
-                <svg class="search-icon icon" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27A6.471 6.471 0 0 0 16 9.5 6.5 6.5 0 1 0 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/></svg>
-                
-                <!-- Search Navigation (Hidden unless searching) -->
-                <div id="searchNav" class="search-nav">
-                    <span id="matchCounter">0/0</span>
-                    <button class="btn-mini" id="prevMatch" title="Anterior">▲</button>
-                    <button class="btn-mini" id="nextMatch" title="Siguiente">▼</button>
-                    <button class="btn-mini" id="clearSearch" title="Limpiar">✕</button>
+                <div class="search-container">
+                    <input type="text" id="searchInput" class="search-input" placeholder="Buscar..." aria-label="Buscar">
+                    <svg class="search-icon icon" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27A6.471 6.471 0 0 0 16 9.5 6.5 6.5 0 1 0 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/></svg>
                 </div>
             </div>
-
-            <!-- Quick Navigation Row -->
-            <nav class="quick-nav" id="quickNav">
-                <!-- Links will be injected by JS or written manually -->
-                <a href="#loot" class="nav-link" style="--active-color: var(--color-loot)">🏠 Loot</a>
-                <a href="#combat" class="nav-link" style="--active-color: var(--color-combat)">⚔️ Combate</a>
-                <a href="#health" class="nav-link" style="--active-color: var(--color-health)">🚑 Salud</a>
-                <a href="#skills" class="nav-link" style="--active-color: var(--color-skills)">🛠️ Skills</a>
-                <a href="#cars" class="nav-link" style="--active-color: var(--color-cars)">🚗 Autos</a>
-                <a href="#base" class="nav-link" style="--active-color: var(--color-base)">🛡️ Base</a>
-                <a href="#pro" class="nav-link" style="--active-color: var(--color-pro)">💡 Pro</a>
-            </nav>
         </div>
     </header>
 
-    <main class="dashboard" id="mainDashboard">
+    <div class="main-container">
+        <!-- VIEW 1: DASHBOARD -->
+        <div id="dashboardView" class="view active-view">
+            <nav class="quick-nav" id="quickNav"></nav>
+            <main class="dashboard"></main>
+        </div>
 
-        <!-- SECCIÓN 1: Primeros Pasos -->
-        <section id="loot" class="category-section" style="--section-color: var(--color-loot);">
-            <div class="category-header">
-                <svg class="icon" viewBox="0 0 24 24"><path d="M10 20v-6h4v6h5v-8h3L12 3 2 12h3v8z"/></svg>
-                <h2>Primeros Pasos y Looting</h2>
-                <svg class="icon toggle-icon" viewBox="0 0 24 24"><path d="M7.41 8.59L12 13.17l4.59-4.58L18 10l-6 6-6-6 1.41-1.41z"/></svg>
+        <!-- VIEW 2: NODE CANVAS -->
+        <div id="nodeView" class="view">
+            <div id="nodeWorld">
+                <svg id="connections"></svg>
+                <!-- Nodes generated via JS -->
             </div>
-            <div class="category-content">
-                <div class="card-grid">
-                    <div class="card">
-                        <h3>Spawn</h3>
-                        <div class="card-content">Explora primero el área inmediata. Suele ser más segura y tener recursos básicos.</div>
-                    </div>
-                    <div class="card">
-                        <h3>Armas Iniciales</h3>
-                        <div class="card-content">Busca en cocinas, baños, armarios y garajes. Si parece un arma, úsala (sartenes, tubos).</div>
-                    </div>
-                    <div class="card">
-                        <h3>Herramientas Esenciales <span class="badge badge-danger">Crítico</span></h3>
-                        <div class="card-content">
-                            Martillo, sierra, abrelatas, mochila y reloj digital.
-                        </div>
-                    </div>
-                    <div class="card">
-                        <h3>Agua y Comida</h3>
-                        <div class="card-content">
-                            <ul>
-                                <li>Cualquier recipiente sirve para agua.</li>
-                                <li>Lleva agua limpia en principal = beber automático.</li>
-                                <li><strong>Cocina</strong> alimentos crudos, apaga el horno.</li>
-                            </ul>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </section>
+        </div>
+    </div>
 
-        <!-- SECCIÓN 2: Combate -->
-        <section id="combat" class="category-section" style="--section-color: var(--color-combat);">
-            <div class="category-header">
-                <svg class="icon" viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 14h-2v-2h2v2zm0-6h-2V7h2v3z"/></svg>
-                <h2>Combate y Movimiento</h2>
-                <svg class="icon toggle-icon" viewBox="0 0 24 24"><path d="M7.41 8.59L12 13.17l4.59-4.58L18 10l-6 6-6-6 1.41-1.41z"/></svg>
-            </div>
-            <div class="category-content">
-                <div class="card-grid">
-                    <div class="card">
-                        <h3>Kiting (Golpear y Moverse) <span class="badge badge-pro">Vital</span></h3>
-                        <div class="card-content">Camina hacia atrás al golpear. Usa <strong>Espacio</strong> para empujar si se acercan demasiado.</div>
-                    </div>
-                    <div class="card">
-                        <h3>Gestión de Energía</h3>
-                        <div class="card-content">
-                            <strong>¡NO CORRAS!</strong> El agotamiento reduce daño y velocidad drásticamente. Caminando eres más rápido que ellos.
-                        </div>
-                    </div>
-                    <div class="card">
-                        <h3>Puntería</h3>
-                        <div class="card-content">Apunta con el cursor DETRÁS del zombi. Gira 360º frecuentemente (vigila espalda).</div>
-                    </div>
-                    <div class="card">
-                        <h3>Sigilo y Vallas</h3>
-                        <div class="card-content">
-                            Usa esquinas para romper línea de visión. Vallas altas = seguras. Vallas bajas = salta con 'E' (sin correr para no tropezar).
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </section>
-
-        <!-- SECCIÓN 3: Salud -->
-        <section id="health" class="category-section" style="--section-color: var(--color-health);">
-            <div class="category-header">
-                <svg class="icon" viewBox="0 0 24 24"><path d="M19 3H5c-1.1 0-1.99.9-1.99 2L3 19c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm-1 11h-4v4h-4v-4H6v-4h4V6h4v4h4v4z"/></svg>
-                <h2>Salud y Heridas</h2>
-                <svg class="icon toggle-icon" viewBox="0 0 24 24"><path d="M7.41 8.59L12 13.17l4.59-4.58L18 10l-6 6-6-6 1.41-1.41z"/></svg>
-            </div>
-            <div class="category-content">
-                <div class="card-grid">
-                    <div class="card">
-                        <h3>Vendas</h3>
-                        <div class="card-content">Rompe ropa, sábanas o cortinas para crear vendas improvisadas. Lávalas con agua caliente.</div>
-                    </div>
-                    <div class="card">
-                        <h3>Tipos de Heridas</h3>
-                        <div class="card-content">
-                            <ul>
-                                <li><strong>Arañazos:</strong> Solo vendar. (7% chance zombi)</li>
-                                <li><strong>Profundas:</strong> Suturar (aguja+hilo) + vendar.</li>
-                            </ul>
-                        </div>
-                    </div>
-                    <div class="card">
-                        <h3>Infección (De Herida)</h3>
-                        <div class="card-content">Usa desinfectante, toallitas con alcohol o antibióticos. No es lo mismo que el virus Z.</div>
-                    </div>
-                    <div class="card">
-                        <h3>Protección</h3>
-                        <div class="card-content">Chaquetas de cuero, cascos, botas militares = Mejor protección vs mordiscos.</div>
-                    </div>
-                </div>
-            </div>
-        </section>
-
-        <!-- SECCIÓN 4: Habilidades -->
-        <section id="skills" class="category-section" style="--section-color: var(--color-skills);">
-            <div class="category-header">
-                <svg class="icon" viewBox="0 0 24 24"><path d="M4 6H2v14c0 1.1.9 2 2 2h14v-2H4V6zm16-4H8c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm-1 9H9V9h10v2zm-4 4H9v-2h6v2zm4-8H9V5h10v2z"/></svg>
-                <h2>Habilidades y XP</h2>
-                <svg class="icon toggle-icon" viewBox="0 0 24 24"><path d="M7.41 8.59L12 13.17l4.59-4.58L18 10l-6 6-6-6 1.41-1.41z"/></svg>
-            </div>
-            <div class="category-content">
-                <div class="card-grid">
-                    <div class="card">
-                        <h3>TV Life & Living</h3>
-                        <div class="card-content">Sintoniza la 1ª semana. <strong>06:00, 12:00 (Carpintería), 18:00</strong>. XP gratis.</div>
-                    </div>
-                    <div class="card">
-                        <h3>Libros de Habilidad <span class="badge badge-pro">Importante</span></h3>
-                        <div class="card-content">Lee el libro de tu nivel <strong>ANTES</strong> de practicar. Da un multiplicador masivo de XP.</div>
-                    </div>
-                    <div class="card">
-                        <h3>Carpintería</h3>
-                        <div class="card-content">Desmonta camas y armarios grandes. Vital para construir recolectores de lluvia.</div>
-                    </div>
-                    <div class="card">
-                        <h3>Elec. y Mecánica</h3>
-                        <div class="card-content">
-                            Mecánica Nvl 2 + Elec Nvl 1 = <strong>Puente a coches</strong>. Desmonta relojes/radios y cambia piezas.
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </section>
-
-        <!-- SECCIÓN 5: Vehículos -->
-        <section id="cars" class="category-section" style="--section-color: var(--color-cars);">
-            <div class="category-header">
-                <svg class="icon" viewBox="0 0 24 24"><path d="M18.92 6.01C18.72 5.42 18.16 5 17.5 5h-11c-.66 0-1.21.42-1.42 1.01L3 12v8c0 .55.45 1 1 1h1c.55 0 1-.45 1-1v-1h12v1c0 .55.45 1 1 1h1c.55 0 1-.45 1-1v-8l-2.08-5.99zM6.5 16c-.83 0-1.5-.67-1.5-1.5S5.67 13 6.5 13s1.5.67 1.5 1.5S7.33 16 6.5 16zm11 0c-.83 0-1.5-.67-1.5-1.5s.67-1.5 1.5-1.5 1.5.67 1.5 1.5-.67 1.5-1.5 1.5zM5 11l1.5-4.5h11L19 11H5z"/></svg>
-                <h2>Vehículos</h2>
-                <svg class="icon toggle-icon" viewBox="0 0 24 24"><path d="M7.41 8.59L12 13.17l4.59-4.58L18 10l-6 6-6-6 1.41-1.41z"/></svg>
-            </div>
-            <div class="category-content">
-                <div class="card-grid">
-                    <div class="card">
-                        <h3>Encontrar Llaves</h3>
-                        <div class="card-content">Revisa guantera, contacto, asientos, suelo cercano o zombis alrededor.</div>
-                    </div>
-                    <div class="card">
-                        <h3>Seguridad al Entrar</h3>
-                        <div class="card-content">Espera el sonido "clank" al cerrar la puerta antes de acelerar o te morderán.</div>
-                    </div>
-                    <div class="card">
-                        <h3>Menú Radial (V)</h3>
-                        <div class="card-content">Úsalo para dormir, cambiar de asiento (seguridad), repostar o enganchar remolques.</div>
-                    </div>
-                    <div class="card">
-                        <h3>Conducción</h3>
-                        <div class="card-content">Evita atropellar hordas (daña motor rápido). Usa marchas bajas (Cruise Control) para menos ruido.</div>
-                    </div>
-                </div>
-            </div>
-        </section>
-
-        <!-- SECCIÓN 6: Base -->
-        <section id="base" class="category-section" style="--section-color: var(--color-base);">
-            <div class="category-header">
-                <svg class="icon" viewBox="0 0 24 24"><path d="M22 11V3h-7v3H9V3H2v8h7V8h2v10h4v3h7v-8h-7v3h-2V8h2v3z"/></svg> <!-- Castle/Fort alike -->
-                <h2>Supervivencia Avanzada</h2>
-                <svg class="icon toggle-icon" viewBox="0 0 24 24"><path d="M7.41 8.59L12 13.17l4.59-4.58L18 10l-6 6-6-6 1.41-1.41z"/></svg>
-            </div>
-            <div class="category-content">
-                <div class="card-grid">
-                    <div class="card">
-                        <h3>El Helicóptero <span class="badge badge-danger">Peligro</span></h3>
-                        <div class="card-content">Días 6-9. Atrae todo a tu posición. Quédate dentro (si no te vio) o huye en coche lejos de tu base.</div>
-                    </div>
-                    <div class="card">
-                        <h3>Agua y Luz (Cortes)</h3>
-                        <div class="card-content">
-                            Recoge agua residual de grifos/inodoros tras el corte. Construye barriles de lluvia pronto.
-                        </div>
-                    </div>
-                    <div class="card">
-                        <h3>Fontanería Pro <span class="badge badge-pro">Tip</span></h3>
-                        <div class="card-content">Barril de lluvia en piso superior (3x3 grid sobre grifo) + Llave inglesa en fregadero = Agua purificada infinita.</div>
-                    </div>
-                    <div class="card">
-                        <h3>Agricultura</h3>
-                        <div class="card-content">Coles (crecen rápido) o Patatas (duran mucho). Deja espacio entre cultivos para evitar plagas.</div>
-                    </div>
-                </div>
-            </div>
-        </section>
-
-        <!-- SECCIÓN 7: Pro Tips -->
-        <section id="pro" class="category-section" style="--section-color: var(--color-pro);">
-            <div class="category-header">
-                <svg class="icon" viewBox="0 0 24 24"><path d="M12 17.27L18.18 21l-1.64-7.03L22 9.24l-7.19-.61L12 2 9.19 8.63 2 9.24l5.46 4.73L5.82 21z"/></svg>
-                <h2>Consejos "Pro"</h2>
-                <svg class="icon toggle-icon" viewBox="0 0 24 24"><path d="M7.41 8.59L12 13.17l4.59-4.58L18 10l-6 6-6-6 1.41-1.41z"/></svg>
-            </div>
-            <div class="category-content">
-                <div class="card-grid">
-                    <div class="card">
-                        <h3>Breaching (Entradas)</h3>
-                        <div class="card-content">Al abrir puertas, prepárate para empujar inmediatamente. Empuja puertas cerradas para chequear sonido.</div>
-                    </div>
-                    <div class="card">
-                        <h3>Cristales Rotos</h3>
-                        <div class="card-content"><strong>Quita los cristales</strong> antes de pasar por ventana. Ten un arma en mano al romperlos para no cortarte.</div>
-                    </div>
-                    <div class="card">
-                        <h3>Armas de Fuego</h3>
-                        <div class="card-content">Evítalas al inicio (imán de muerte). Escopetas = Bestia para subir puntería (golpean a 4 a la vez).</div>
-                    </div>
-                    <div class="card">
-                        <h3>Fuego</h3>
-                        <div class="card-content">Hogueras y Molotovs eliminan hordas sin gastar balas. ¡Cuidado, el fuego se expande y destruye loot!</div>
-                    </div>
-                </div>
-            </div>
-        </section>
-
-    </main>
+    <!-- DATA SOURCE -->
+    <script id="pzData" type="application/json">
+    [
+        { "id": "loot", "title": "Primeros Pasos y Looting", "icon": "M10 20v-6h4v6h5v-8h3L12 3 2 12h3v8z", "color": "var(--color-loot)", "cards": [ { "title": "Spawn & Ubicación", "content": "Explora el área inmediata (segura). Rosewood es la mejor ciudad inicial. Usa mapas anotados.", "badges": [] }, { "title": "Gestión de Inventario", "content": "No lootes todo. Prioriza armas/mochilas. Usa bolsas de basura/cajas en la mano secundaria. Equipa la riñonera junto a la mochila.", "badges": ["Nuevo"] }, { "title": "Herramientas Esenciales", "content": "Martillo, sierra, abrelatas, mochila, reloj digital. Si no encuentras nada, haz lanzas y hachas de piedra.", "badges": ["Crítico"] } ] },
+        { "id": "combat", "title": "Combate y Movimiento", "icon": "M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 14h-2v-2h2v2zm0-6h-2V7h2v3z", "color": "var(--color-combat)", "cards": [ { "title": "Mecánicas Vitales", "content": "Pisabezas: Párate sobre zombi caído para que no se levante. Kiting: Retrocede siempre al golpear.", "badges": ["Vital"] }, { "title": "Energía y Ruido", "content": "¡NO CORRAS! Caminando eres más rápido. Q de pie: Grito. Q agachado: Susurro.", "badges": [] } ] },
+        { "id": "health", "title": "Salud y Heridas", "icon": "M19 3H5c-1.1 0-1.99.9-1.99 2L3 19c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm-1 11h-4v4h-4v-4H6v-4h4V6h4v4h4v4z", "color": "var(--color-health)", "cards": [ { "title": "Vendas y Auxilios", "content": "Sin vendas: Retales de ropa sucia. La infección de herida NO es el virus zombi, usa desinfectante.", "badges": [] }, { "title": "Protección", "content": "Guantes de cuero para cristales. Botas militares para pisotones. Chaquetas de cuero.", "badges": [] } ] },
+        { "id": "skills", "title": "Habilidades y XP", "icon": "M4 6H2v14c0 1.1.9 2 2 2h14v-2H4V6zm16-4H8c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm-1 9H9V9h10v2zm-4 4H9v-2h6v2zm4-8H9V5h10v2z", "color": "var(--color-skills)", "cards": [ { "title": "Multiplicadores XP", "content": "TV (Life & Living) a las 06, 12 y 18h. Lee libros de habilidad ANTES de practicar.", "badges": ["Importante"] }, { "title": "Elec. y Mecánica", "content": "Mecánica 2 + Elec 1 = Puente a coches. Desmonta relojes y radios.", "badges": [] } ] },
+        { "id": "cars", "title": "Vehículos", "icon": "M18.92 6.01C18.72 5.42 18.16 5 17.5 5h-11c-.66 0-1.21.42-1.42 1.01L3 12v8c0 .55.45 1 1 1h1c.55 0 1-.45 1-1v-1h12v1c0 .55.45 1 1 1h1c.55 0 1-.45 1-1v-8l-2.08-5.99z", "color": "var(--color-cars)", "cards": [ { "title": "Acceso", "content": "Tecla Z para entrar rápido. Si no hay llave, rompe ventana derecha y haz puente.", "badges": [] }, { "title": "Mantenimiento", "content": "Escape roto = Ruido. La batería se carga conduciendo.", "badges": [] } ] },
+        { "id": "base", "title": "Supervivencia Avanzada", "icon": "M22 11V3h-7v3H9V3H2v8h7V8h2v10h4v3h7v-8h-7v3h-2V8h2v3z", "color": "var(--color-base)", "cards": [ { "title": "Fortificación", "content": "3 tablones bloquean visión. Pon sábanas en ventanas. Destruye escaleras para base invencible.", "badges": [] }, { "title": "Agua y Luz", "content": "Cortes día 0-30. Barriles de lluvia sobre fregadero para fontanería.", "badges": [] } ] },
+        { "id": "pro", "title": "Consejos Pro", "icon": "M12 17.27L18.18 21l-1.64-7.03L22 9.24l-7.19-.61L12 2 9.19 8.63 2 9.24l5.46 4.73L5.82 21z", "color": "var(--color-pro)", "cards": [ { "title": "Breaching", "content": "Quita cristales antes de cruzar. Empuja puertas antes de abrir.", "badges": [] }, { "title": "Combate Avanzado", "content": "Escopetas para puntería. F2 para pausa real y navegar menús.", "badges": [] } ] }
+    ]
+    </script>
 
     <script>
         document.addEventListener('DOMContentLoaded', () => {
-            // --- DOM Elements ---
-            const themeToggleBtn = document.getElementById('themeToggle');
-            const toggleAllBtn = document.getElementById('toggleAllBtn');
-            const searchInput = document.getElementById('searchInput');
-            const searchNav = document.getElementById('searchNav');
-            const matchCounter = document.getElementById('matchCounter');
-            const prevMatchBtn = document.getElementById('prevMatch');
-            const nextMatchBtn = document.getElementById('nextMatch');
-            const clearSearchBtn = document.getElementById('clearSearch');
-            const quickNavLinks = document.querySelectorAll('.nav-link');
-            const categoryHeaders = document.querySelectorAll('.category-header');
-            
-            // State
-            let searchMatches = [];
-            let currentMatchIndex = -1;
-            let isAllCollapsed = false;
+            // --- STATE & DATA ---
+            const rawData = JSON.parse(document.getElementById('pzData').textContent);
+            let activeConnections = [];
 
-            // --- 1. Theme Logic ---
-            const savedTheme = localStorage.getItem('pz-theme') || 'dark';
-            document.documentElement.setAttribute('data-theme', savedTheme);
-            updateThemeIcons(savedTheme);
-
-            themeToggleBtn.addEventListener('click', () => {
-                const currentTheme = document.documentElement.getAttribute('data-theme');
-                const newTheme = currentTheme === 'dark' ? 'light' : 'dark';
-                
-                document.documentElement.setAttribute('data-theme', newTheme);
-                localStorage.setItem('pz-theme', newTheme);
-                updateThemeIcons(newTheme);
+            // Initialize default connections (Start -> All)
+            rawData.forEach(cat => {
+                activeConnections.push({
+                    fromNode: 'node-start', fromPinIdx: 0,
+                    toNode: `node-${cat.id}`, toPinIdx: 0
+                });
             });
 
-            function updateThemeIcons(theme) {
-                const moonIcon = themeToggleBtn.querySelector('.moon');
-                const sunIcon = themeToggleBtn.querySelector('.sun');
-                if (theme === 'dark') {
-                    moonIcon.style.display = 'block';
-                    sunIcon.style.display = 'none';
-                } else {
-                    moonIcon.style.display = 'none';
-                    sunIcon.style.display = 'block';
-                }
+            const dashboardContainer = document.querySelector('.dashboard');
+            const quickNavContainer = document.querySelector('.quick-nav');
+            const nodeWorld = document.getElementById('nodeWorld');
+            const svgConnections = document.getElementById('connections');
+            const nodeView = document.getElementById('nodeView');
+
+            // 1. RENDER DASHBOARD (CLASSIC)
+            rawData.forEach(cat => {
+                const navLink = document.createElement('a');
+                navLink.href = `#${cat.id}`;
+                navLink.className = 'nav-link';
+                navLink.style.setProperty('--active-color', cat.color);
+                navLink.innerHTML = `<svg class="icon" viewBox="0 0 24 24"><path d="${cat.icon}"/></svg> ${cat.title.split(' ')[0]}`;
+                quickNavContainer.appendChild(navLink);
+
+                const section = document.createElement('section');
+                section.id = cat.id;
+                section.className = 'category-section collapsed';
+                section.style.setProperty('--section-color', cat.color);
+                let cardsHtml = cat.cards.map(c => `
+                    <div class="card">
+                        <h3>${c.title} <span>${c.badges.map(b => `<span class="badge ${b==='Crítico'||b==='Vital'?'badge-danger':b==='Importante'?'badge-pro':'badge-info'}">${b}</span>`).join('')}</span></h3>
+                        <div class="card-content"><ul>${c.content.split('. ').filter(t=>t).map(t => `<li>${t.replace('.','')}</li>`).join('')}</ul></div>
+                    </div>`).join('');
+                section.innerHTML = `<div class="category-header"><svg class="icon" viewBox="0 0 24 24"><path d="${cat.icon}"/></svg><h2>${cat.title}</h2><svg class="icon toggle-icon" viewBox="0 0 24 24"><path d="M7.41 8.59L12 13.17l4.59-4.58L18 10l-6 6-6-6 1.41-1.41z"/></svg></div><div class="category-content"><div class="card-grid">${cardsHtml}</div></div>`;
+                dashboardContainer.appendChild(section);
+            });
+
+            // 2. RENDER NODE MAP
+            function createPin(type, index) {
+                const pin = document.createElement('div');
+                pin.className = `node-pin pin-${type}`;
+                pin.dataset.type = type;
+                pin.dataset.index = index;
+                return pin;
             }
 
-            // --- 2. Accordion Logic ---
-            categoryHeaders.forEach(header => {
-                header.addEventListener('click', () => {
-                    const section = header.parentElement;
-                    section.classList.toggle('collapsed');
-                });
-            });
+            const startNode = document.createElement('div');
+            startNode.className = 'node-box node-start node-layer';
+            startNode.id = 'node-start';
+            startNode.style.left = '50px'; startNode.style.top = '300px';
+            startNode.innerHTML = `
+                <div class="node-header">Superviviente</div>
+                <div class="node-body">Inicio de Partida</div>
+                <div class="node-pins-container pins-right" id="pins-start-out"></div>
+            `;
+            nodeWorld.appendChild(startNode);
+            startNode.querySelector('.pins-right').appendChild(createPin('out', 0));
 
-            toggleAllBtn.addEventListener('click', () => {
-                isAllCollapsed = !isAllCollapsed;
-                const sections = document.querySelectorAll('.category-section');
+            const layoutMap = [ { x: 400, y: 50 }, { x: 400, y: 400 }, { x: 400, y: 750 }, { x: 800, y: 50 }, { x: 800, y: 350 }, { x: 800, y: 650 }, { x: 1200, y: 350 } ];
+            rawData.forEach((cat, index) => {
+                const pos = layoutMap[index] || { x: 400, y: 100 * index };
+                const node = document.createElement('div');
+                node.className = 'node-box node-layer';
+                node.id = `node-${cat.id}`;
+                node.style.left = `${pos.x}px`; node.style.top = `${pos.y}px`;
+                node.style.setProperty('--node-color', cat.color);
+
+                // Expanded Item Content Generation
+                let contentHtml = cat.cards.map(c => `
+                    <div class="node-item">
+                        <strong>${c.title}</strong>
+                        <div class="node-item-text">${c.content}</div>
+                        <div class="node-item-toggle">Ver más...</div>
+                    </div>
+                `).join('');
+
+                node.innerHTML = `
+                    <div class="node-header">
+                        <svg class="icon" viewBox="0 0 24 24"><path d="${cat.icon}"/></svg>
+                        ${cat.title}
+                        <div class="node-collapse-btn" title="Expandir/Contraer">▼</div>
+                    </div>
+                    <div class="node-body">${contentHtml}</div>
+                    <div class="node-pins-container pins-left" id="pins-${cat.id}-in"></div>
+                    <div class="node-pins-container pins-right" id="pins-${cat.id}-out"></div>
+                `;
                 
-                // Update Icon logic could be added here
-                sections.forEach(section => {
-                    if (isAllCollapsed) section.classList.add('collapsed');
-                    else section.classList.remove('collapsed');
-                });
-                
-                // Update Button Icon (Simple flip)
-                toggleAllBtn.style.transform = isAllCollapsed ? 'rotate(45deg)' : 'rotate(0deg)';
+                node.querySelector('.pins-left').appendChild(createPin('in', 0));
+                node.querySelector('.pins-right').appendChild(createPin('out', 0));
+                nodeWorld.appendChild(node);
+                makeDraggable(node);
             });
+            makeDraggable(startNode);
 
-            // --- 3. Search Logic ---
-            searchInput.addEventListener('input', (e) => {
-                const query = e.target.value.toLowerCase().trim();
-                clearHighlights();
+            // 3. INTERACTION LOGIC (Unified Touch/Mouse)
 
-                if (query.length < 2) {
-                    searchNav.classList.remove('active');
-                    return;
+            function getPointerPos(e) {
+                if (e.touches && e.touches.length > 0) return { x: e.touches[0].clientX, y: e.touches[0].clientY };
+                if (e.changedTouches && e.changedTouches.length > 0) return { x: e.changedTouches[0].clientX, y: e.changedTouches[0].clientY };
+                return { x: e.clientX, y: e.clientY };
+            }
+
+            // A. Expand/Collapse Node (Global)
+            nodeWorld.addEventListener('click', (e) => {
+                // Header Minimize
+                if(e.target.closest('.node-collapse-btn')) {
+                    const node = e.target.closest('.node-box');
+                    node.classList.toggle('minimized');
+                    setTimeout(updateConnections, 350);
                 }
-
-                performSearch(query);
+                // Item Text Expansion
+                if(e.target.closest('.node-item')) {
+                    const item = e.target.closest('.node-item');
+                    item.classList.toggle('expanded');
+                    
+                    // Update toggle text
+                    const toggle = item.querySelector('.node-item-toggle');
+                    if(toggle) toggle.textContent = item.classList.contains('expanded') ? '' : 'Ver más...';
+                    
+                    // Delay update connections to match CSS transition
+                    setTimeout(updateConnections, 300);
+                }
             });
 
-            function performSearch(query) {
-                const cards = document.querySelectorAll('.card');
-                searchMatches = [];
+            // B. Canvas Navigation
+            let transform = { x: 0, y: 0, scale: 1 };
+            let isPanning = false, startPan = { x: 0, y: 0 };
 
-                cards.forEach(card => {
-                    // Search in text content of the card
-                    const text = card.textContent.toLowerCase();
-                    if (text.includes(query)) {
-                        searchMatches.push(card);
-                        // Visual highlight
-                        card.classList.add('search-match');
-                        
-                        // Auto-expand parent section
-                        const section = card.closest('.category-section');
-                        if (section.classList.contains('collapsed')) {
-                            section.classList.remove('collapsed');
+            function applyTransform() { nodeWorld.style.transform = `translate(${transform.x}px, ${transform.y}px) scale(${transform.scale})`; }
+
+            function startPanAction(e) {
+                if(e.target.closest('.node-pin') || e.target.closest('.node-header') || e.target.closest('.node-item')) return;
+                isPanning = true;
+                const pos = getPointerPos(e);
+                startPan = { x: pos.x - transform.x, y: pos.y - transform.y };
+                nodeView.style.cursor = 'grabbing';
+            }
+            nodeView.addEventListener('mousedown', startPanAction);
+            nodeView.addEventListener('touchstart', startPanAction, {passive: false});
+
+            function movePanAction(e) {
+                if (isPanning) {
+                    e.preventDefault();
+                    const pos = getPointerPos(e);
+                    transform.x = pos.x - startPan.x;
+                    transform.y = pos.y - startPan.y;
+                    applyTransform();
+                }
+            }
+            window.addEventListener('mousemove', movePanAction);
+            window.addEventListener('touchmove', movePanAction, {passive: false});
+
+            function endPanAction() { isPanning = false; nodeView.style.cursor = 'grab'; }
+            window.addEventListener('mouseup', endPanAction);
+            window.addEventListener('touchend', endPanAction);
+
+            nodeView.addEventListener('wheel', (e) => {
+                e.preventDefault();
+                const scaleAmount = -e.deltaY * 0.001;
+                transform.scale = Math.min(Math.max(0.2, transform.scale + scaleAmount), 3);
+                applyTransform();
+            });
+
+            // C. Node Dragging
+            function makeDraggable(element) {
+                const header = element.querySelector('.node-header');
+                let isDragging = false, dragStart = { x: 0, y: 0 };
+                
+                function startDrag(e) {
+                    if(e.target.closest('.node-collapse-btn')) return;
+                    isDragging = true;
+                    const pos = getPointerPos(e);
+                    dragStart.x = pos.x; dragStart.y = pos.y;
+                    e.stopPropagation();
+                }
+                header.addEventListener('mousedown', startDrag);
+                header.addEventListener('touchstart', startDrag, {passive: false});
+
+                function moveDrag(e) {
+                    if (!isDragging) return;
+                    e.preventDefault();
+                    const pos = getPointerPos(e);
+                    const dx = (pos.x - dragStart.x) / transform.scale;
+                    const dy = (pos.y - dragStart.y) / transform.scale;
+                    element.style.left = `${(parseFloat(element.style.left)||0) + dx}px`;
+                    element.style.top = `${(parseFloat(element.style.top)||0) + dy}px`;
+                    dragStart.x = pos.x; dragStart.y = pos.y;
+                    updateConnections();
+                }
+                window.addEventListener('mousemove', moveDrag);
+                window.addEventListener('touchmove', moveDrag, {passive: false});
+
+                function endDrag() { isDragging = false; }
+                window.addEventListener('mouseup', endDrag);
+                window.addEventListener('touchend', endDrag);
+            }
+
+            // D. Wire Connection System
+            let dragWire = null;
+            const tempPath = document.createElementNS("http://www.w3.org/2000/svg", "path");
+            tempPath.setAttribute("class", "connection-path temp");
+
+            function startWireDrag(e) {
+                const target = document.elementFromPoint(getPointerPos(e).x, getPointerPos(e).y);
+                const pin = e.target.closest ? e.target : target;
+                if(pin && pin.classList.contains('node-pin') && pin.dataset.type === 'out') {
+                    e.stopPropagation(); e.preventDefault();
+                    const startNode = pin.closest('.node-box');
+                    dragWire = { startNodeId: startNode.id, startPinIdx: parseInt(pin.dataset.index), startX: 0, startY: 0 };
+                    const pinRect = pin.getBoundingClientRect();
+                    const worldRect = nodeWorld.getBoundingClientRect();
+                    dragWire.startX = (pinRect.left + pinRect.width/2 - worldRect.left) / transform.scale;
+                    dragWire.startY = (pinRect.top + pinRect.height/2 - worldRect.top) / transform.scale;
+                    svgConnections.appendChild(tempPath);
+                    updateTempWire(dragWire.startX, dragWire.startY);
+                }
+            }
+            nodeWorld.addEventListener('mousedown', startWireDrag);
+            nodeWorld.addEventListener('touchstart', startWireDrag, {passive: false});
+
+            function moveWireDrag(e) {
+                if(dragWire) {
+                    e.preventDefault();
+                    const pos = getPointerPos(e);
+                    const worldRect = nodeWorld.getBoundingClientRect();
+                    const mouseX = (pos.x - worldRect.left) / transform.scale;
+                    const mouseY = (pos.y - worldRect.top) / transform.scale;
+                    updateTempWire(mouseX, mouseY);
+                }
+            }
+            window.addEventListener('mousemove', moveWireDrag);
+            window.addEventListener('touchmove', moveWireDrag, {passive: false});
+
+            function endWireDrag(e) {
+                if(dragWire) {
+                    const pos = getPointerPos(e);
+                    tempPath.style.display = 'none';
+                    const targetEl = document.elementFromPoint(pos.x, pos.y);
+                    tempPath.style.display = 'block';
+                    const targetPin = targetEl ? targetEl.closest('.node-pin') : null;
+
+                    if(targetPin && targetPin.dataset.type === 'in') {
+                        const targetNode = targetPin.closest('.node-box');
+                        if(targetNode.id !== dragWire.startNodeId) {
+                            activeConnections.push({ fromNode: dragWire.startNodeId, fromPinIdx: dragWire.startPinIdx, toNode: targetNode.id, toPinIdx: parseInt(targetPin.dataset.index) });
+                            addNewPinIfNeeded(document.getElementById(dragWire.startNodeId), 'out');
+                            addNewPinIfNeeded(targetNode, 'in');
+                            updateConnections();
                         }
                     }
-                });
-
-                updateSearchNav();
-                
-                if (searchMatches.length > 0) {
-                    currentMatchIndex = 0;
-                    scrollToMatch(0);
+                    if(tempPath.parentNode) tempPath.parentNode.removeChild(tempPath);
+                    dragWire = null;
                 }
             }
+            window.addEventListener('mouseup', endWireDrag);
+            window.addEventListener('touchend', endWireDrag);
 
-            function updateSearchNav() {
-                if (searchMatches.length > 0) {
-                    searchNav.classList.add('active');
-                    matchCounter.textContent = `1/${searchMatches.length}`;
-                } else {
-                    searchNav.classList.remove('active');
-                    // Optional: Show "No results" toast
-                }
+            function addNewPinIfNeeded(nodeElement, type) {
+                let containerId;
+                if(nodeElement.id === 'node-start') { if(type === 'in') return; containerId = 'pins-start-out'; }
+                else { const catId = nodeElement.id.replace('node-', ''); containerId = `pins-${catId}-${type}`; }
+                const container = document.getElementById(containerId);
+                if(!container) return;
+                const currentPins = container.querySelectorAll('.node-pin').length;
+                container.appendChild(createPin(type, currentPins));
             }
 
-            function scrollToMatch(index) {
-                if (index < 0 || index >= searchMatches.length) return;
-                
-                // Remove focus from previous
-                document.querySelectorAll('.active-focus').forEach(el => el.classList.remove('active-focus'));
-                
-                const card = searchMatches[index];
-                card.classList.add('active-focus');
-                
-                // Scroll with offset for sticky header
-                const headerOffset = 80;
-                const elementPosition = card.getBoundingClientRect().top;
-                const offsetPosition = elementPosition + window.pageYOffset - headerOffset;
+            function updateTempWire(endX, endY) {
+                const startX = dragWire.startX; const startY = dragWire.startY;
+                const dist = Math.abs(endX - startX) * 0.5;
+                tempPath.setAttribute("d", `M ${startX} ${startY} C ${startX + dist} ${startY}, ${endX - dist} ${endY}, ${endX} ${endY}`);
+            }
 
-                window.scrollTo({
-                    top: offsetPosition,
-                    behavior: "smooth"
+            function updateConnections() {
+                const paths = svgConnections.querySelectorAll('.connection-path:not(.temp)');
+                paths.forEach(p => p.remove());
+
+                activeConnections.forEach(conn => {
+                    const fromNode = document.getElementById(conn.fromNode);
+                    const toNode = document.getElementById(conn.toNode);
+                    if (!fromNode || !toNode) return;
+
+                    const fromPins = fromNode.querySelectorAll(`.node-pins-container.pins-right .node-pin`);
+                    const toPins = toNode.querySelectorAll(`.node-pins-container.pins-left .node-pin`);
+                    const fromPin = fromPins[conn.fromPinIdx] || fromPins[fromPins.length-1];
+                    const toPin = toPins[conn.toPinIdx] || toPins[toPins.length-1];
+
+                    const worldRect = nodeWorld.getBoundingClientRect();
+                    const fRect = fromPin.getBoundingClientRect();
+                    const tRect = toPin.getBoundingClientRect();
+
+                    const startX = (fRect.left + fRect.width/2 - worldRect.left) / transform.scale;
+                    const startY = (fRect.top + fRect.height/2 - worldRect.top) / transform.scale;
+                    const endX = (tRect.left + tRect.width/2 - worldRect.left) / transform.scale;
+                    const endY = (tRect.top + tRect.height/2 - worldRect.top) / transform.scale;
+                    const dist = Math.abs(endX - startX) * 0.5;
+
+                    const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
+                    path.setAttribute("d", `M ${startX} ${startY} C ${startX + dist} ${startY}, ${endX - dist} ${endY}, ${endX} ${endY}`);
+                    path.setAttribute("class", "connection-path");
+                    path.style.stroke = fromNode.style.getPropertyValue('--node-color') || '#fff';
+                    svgConnections.appendChild(path);
                 });
-
-                matchCounter.textContent = `${index + 1}/${searchMatches.length}`;
             }
 
-            function clearHighlights() {
-                document.querySelectorAll('.search-match').forEach(el => el.classList.remove('search-match'));
-                document.querySelectorAll('.active-focus').forEach(el => el.classList.remove('active-focus'));
-                searchMatches = [];
-                currentMatchIndex = -1;
-            }
-
-            // Search Navigation Buttons
-            nextMatchBtn.addEventListener('click', () => {
-                if (searchMatches.length === 0) return;
-                currentMatchIndex = (currentMatchIndex + 1) % searchMatches.length;
-                scrollToMatch(currentMatchIndex);
-            });
-
-            prevMatchBtn.addEventListener('click', () => {
-                if (searchMatches.length === 0) return;
-                currentMatchIndex = (currentMatchIndex - 1 + searchMatches.length) % searchMatches.length;
-                scrollToMatch(currentMatchIndex);
-            });
-
-            clearSearchBtn.addEventListener('click', () => {
-                searchInput.value = '';
-                clearHighlights();
-                searchNav.classList.remove('active');
-            });
+            setTimeout(updateConnections, 100);
             
-            // Search Input Enter Key
-            searchInput.addEventListener('keydown', (e) => {
-                if (e.key === 'Enter') {
-                    if(e.shiftKey) prevMatchBtn.click();
-                    else nextMatchBtn.click();
-                }
+            // Shared Logic
+            const viewTabs = document.querySelectorAll('.view-tab');
+            const views = document.querySelectorAll('.view');
+            viewTabs.forEach(tab => {
+                tab.addEventListener('click', () => {
+                    viewTabs.forEach(t => t.classList.remove('active')); tab.classList.add('active');
+                    views.forEach(v => { v.classList.remove('active-view'); if (v.id === tab.dataset.target) v.classList.add('active-view'); });
+                    if(tab.dataset.target === 'nodeView') setTimeout(updateConnections, 50);
+                });
             });
 
-            // --- 4. Quick Nav ScrollSpy ---
-            // Simple Scrollspy to highlight active section in Quick Nav
-            const sections = document.querySelectorAll('section');
-            const navObserver = new IntersectionObserver((entries) => {
-                entries.forEach(entry => {
-                    if (entry.isIntersecting) {
-                        const id = entry.target.getAttribute('id');
-                        quickNavLinks.forEach(link => {
-                            link.classList.remove('active');
-                            if (link.getAttribute('href') === `#${id}`) {
-                                link.classList.add('active');
-                                link.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' });
-                            }
-                        });
-                    }
-                });
-            }, { rootMargin: '-100px 0px -60% 0px' }); // Trigger when section is near top
+            const themeBtn = document.getElementById('themeToggle');
+            const savedTheme = localStorage.getItem('pz-theme') || 'dark';
+            document.documentElement.setAttribute('data-theme', savedTheme);
+            themeBtn.addEventListener('click', () => {
+                const next = document.documentElement.getAttribute('data-theme') === 'dark' ? 'light' : 'dark';
+                document.documentElement.setAttribute('data-theme', next);
+                localStorage.setItem('pz-theme', next);
+                themeBtn.querySelector('.moon').style.display = next==='dark'?'block':'none';
+                themeBtn.querySelector('.sun').style.display = next==='light'?'block':'none';
+            });
+            themeBtn.querySelector('.moon').style.display = savedTheme==='dark'?'block':'none';
+            themeBtn.querySelector('.sun').style.display = savedTheme==='light'?'block':'none';
 
-            sections.forEach(section => navObserver.observe(section));
-
-            // Smooth Scroll for Nav Links (override default to account for sticky header)
-            quickNavLinks.forEach(link => {
-                link.addEventListener('click', (e) => {
+            const normalize = (t) => t.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+            document.getElementById('searchInput').addEventListener('input', (e) => {
+                const q = normalize(e.target.value.trim());
+                document.querySelectorAll('.card').forEach(c => c.classList.toggle('search-match', q.length>1 && normalize(c.textContent).includes(q)));
+                document.querySelectorAll('.node-box').forEach(n => n.style.boxShadow = (q.length>1 && normalize(n.textContent).includes(q)) ? "0 0 0 4px #ffd700" : "");
+            });
+            document.body.addEventListener('click', (e) => {
+                if(e.target.closest('.category-header')) e.target.closest('.category-section').classList.toggle('collapsed');
+                if(e.target.closest('.nav-link')) {
                     e.preventDefault();
-                    const targetId = link.getAttribute('href').substring(1);
-                    const targetSection = document.getElementById(targetId);
-                    
-                    // Expand if collapsed
-                    targetSection.classList.remove('collapsed');
-                    
-                    const headerOffset = 70;
-                    const elementPosition = targetSection.getBoundingClientRect().top;
-                    const offsetPosition = elementPosition + window.pageYOffset - headerOffset;
-
-                    window.scrollTo({
-                        top: offsetPosition,
-                        behavior: "smooth"
-                    });
-                });
+                    const el = document.getElementById(e.target.closest('.nav-link').getAttribute('href').substring(1));
+                    el.classList.remove('collapsed'); el.scrollIntoView({behavior:'smooth', block:'start'});
+                }
             });
         });
     </script>
